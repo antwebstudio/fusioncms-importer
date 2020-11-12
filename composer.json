@@ -1,0 +1,18 @@
+{
+    "name": "antweb/fusioncms-importer",
+    "authors": [
+        {
+            "name": "Hui Yang",
+            "email": "chy1988@antwebstudio.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Ant\\FusionHelper\\": "src/"
+        }
+    },
+    "require": {
+        "illuminate/container": "^6.0|^7.0|^8.0",
+        "illuminate/contracts": "^6.0|^7.0|^8.0"
+    }
+}
