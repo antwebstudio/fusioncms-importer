@@ -1,13 +1,12 @@
-
 <?php
 namespace Ant\FusionHelper;
 
 use Fusion\Models\Field;
 
 class FusionTaxonomyImporter extends FusionImporter {
-    protected $importImages = true;
-    protected $importCategories = true;
-    protected $categoryIdMap = [];
+    public $importImages = true;
+    public $importCategories = true;
+    public $categoryIdMap = [];
 
     public static function make($configs) {
         $self = new self();
@@ -42,13 +41,14 @@ class FusionTaxonomyImporter extends FusionImporter {
         $this->after(function($oldModel, $newModel) use($oldFieldAttributeOrValueGetter, $newFieldAttribute, $newFieldSetHandle) {
             if (!$this->importImages) return;
 
-            $targetField = $this->getField($newFieldSetHandle, $newFieldAttribute);
+            $targetField = self::getField($newFieldSetHandle, $newFieldAttribute);
             
             $filePath = is_callable($oldFieldAttributeOrValueGetter) ? call_user_func_array($oldFieldAttributeOrValueGetter, [$oldModel]) : $oldModel->{$oldFieldAttributeOrValueGetter};
 
             if (isset($filePath) && trim($filePath) != '') {
-                $file = FusionImporter::saveFile($filePath);
-                FusionImporter::saveFilesForModel([$file], $newModel, $targetField);
+                $directoryPath = str_replace('-', '/', $oldModel->story_date);
+                $file = FusionImporter::saveFile($filePath, $directoryPath);
+                FusionImporter::assignFilesToModel([$file], $newModel, $targetField);
             }
         });
 
@@ -59,7 +59,7 @@ class FusionTaxonomyImporter extends FusionImporter {
         $this->after(function($oldModel, $newModel) use($oldFieldAttribute, $newFieldAttribute, $newFieldSetHandle) {
             if (!$this->importCategories) return;
 
-            $targetField = $this->getField($newFieldSetHandle, $newFieldAttribute);
+            $targetField = self::getField($newFieldSetHandle, $newFieldAttribute);
             $oldCategoryIds = $oldModel->{$oldFieldAttribute};
 
             if (isset($newModel->{$newFieldAttribute}) && isset($oldCategoryIds) && $oldCategoryIds) {
@@ -81,27 +81,5 @@ class FusionTaxonomyImporter extends FusionImporter {
 
     public function haveParentCategory($oldFieldAttribute, $newFieldAttribute = 'parent_category', $newFieldSetHandle = 'category') {
         return $this->haveCategory($oldFieldAttribute, $newFieldAttribute, $newFieldSetHandle);
-    }
-
-    protected function getField($fieldSetHandle, $fieldAttribute) {
-        $fieldset = Fieldset::where('handle', $fieldSetHandle)->get()->first();
-        if (!isset($fieldset)) {
-            throw new \Exception('No fieldset with handle "'.$fieldSetHandle.'".');
-        }
-        $section = Section::select('id')->where('fieldset_id', $fieldset->id);
-        
-        //dd($section->get()->map(function($model) { return $model->id; }));
-        //dd($parentCategoryAttribute);
-        
-        $field = Field::where('handle', $fieldAttribute)
-            ->whereIn('section_id', $section)
-            ->get()
-            ->first();
-        
-        if (!isset($field)) {
-            throw new \Exception('Field with handle "'.$fieldAttribute.'" in fieldset "'.$fieldSetHandle.'" is not exist.');
-        }
-
-        return $field;
     }
 }

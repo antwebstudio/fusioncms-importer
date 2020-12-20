@@ -6,6 +6,31 @@ class Importer {
     protected $_after = [];
     protected $_slugCount;
 
+    public static function try($try, $callback, $sleep = 1, $throwExceptionOnFailed = false) {
+        $tried = 0;
+        $failed = false;
+
+        do {
+            echo 'Trying'."\n";
+            $tried++;
+
+            try {
+                call_user_func_array($callback, []);
+                $failed = false;
+            } catch (\Exception $ex) {
+                $failed = true;
+
+                if ($throwExceptionOnFailed && $tried >= $try) {
+                    throw $ex;
+                }
+                echo 'Retry'."\n";
+                if ($sleep) sleep($sleep);
+            }
+        } while($tried < $try && $failed);
+
+        return !$failed;
+    }
+
     public function setHandler($callback) {
         $this->_handler = $callback;
         return $this;

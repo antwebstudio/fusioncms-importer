@@ -6,6 +6,8 @@ use Illuminate\Support\Str;
 use Fusion\Models\Field;
 use Fusion\Models\Directory;
 use Fusion\Models\File as FileModel;
+use Fusion\Models\Fieldset;
+use Fusion\Models\Section;
 
 class FusionImporter extends Importer {
     protected static $savedFilePath;
@@ -18,9 +20,43 @@ class FusionImporter extends Importer {
         return $result;
     }
 
+    public static function getField($fieldSetHandle, $fieldAttribute) {
+        $fieldset = Fieldset::where('handle', $fieldSetHandle)->get()->first();
+        if (!isset($fieldset)) {
+            throw new \Exception('No fieldset with handle "'.$fieldSetHandle.'".');
+        }
+        $section = Section::select('id')->where('fieldset_id', $fieldset->id);
+        
+        //dd($section->get()->map(function($model) { return $model->id; }));
+        //dd($parentCategoryAttribute);
+        
+        $field = Field::where('handle', $fieldAttribute)
+            ->whereIn('section_id', $section)
+            ->get()
+            ->first();
+        
+        if (!isset($field)) {
+            throw new \Exception('Field with handle "'.$fieldAttribute.'" in fieldset "'.$fieldSetHandle.'" is not exist.');
+        }
+
+        return $field;
+    }
+
+    public static function isFileSaved($filePath) {
+        return self::getSavedFileUid($filePath) === null;
+    }
+
     public static function getFileUid($filePath) {
+        return self::getSavedFileUid($filePath);
+    }
+
+    /**
+     * return [$path => $uid]
+     */
+    protected static function getSavedFiles() {
         if (!isset(self::$savedFilePath)) {
             self::$savedFilePath = [];
+
             $files = Storage::disk('public')->files('files');
             foreach ($files as $file) {
                 preg_match('/files\/([a-z0-9]{13,15})-(.+)/', $file, $matches);
@@ -29,15 +65,43 @@ class FusionImporter extends Importer {
                 self::$savedFilePath[$path] = $matches[1];
             }
         }
+        return self::$savedFilePath;
+    }
 
-        return self::$savedFilePath[$filePath] ?? null;
+    public static function getSavedFileUid($filePath) {
+        $savedFiles = self::getSavedFiles();
+        return $savedFiles[$filePath] ?? null;
     }
 
     public static function validateFilePath($filePath) {
         return isset($filePath) && trim($filePath) != '';
     }
 
-    public static function saveFile($filePath) {
+    public static function getDirectory($directory, $parent = null) {
+        if (!is_object($directory)) {
+            $seperator = '/';
+
+            if (strpos($directory, $seperator) !== false) {
+                $parts = explode($seperator, $directory);
+                $directory = $parts[count($parts) - 1];
+                array_pop($parts);
+                $parentPath = implode($seperator, $parts);
+                $parent = self::getDirectory($parentPath);
+
+                return self::getDirectory($directory, $parent);
+            } else {
+                return Directory::firstOrCreate([
+                    'name' => $directory,
+                    'slug' => static::slug($directory),
+                    'parent_id' => $parent->id ?? 0,
+                ]);
+            }
+        }
+
+        return $directory;
+    }
+
+    public static function saveFile($filePath, $directory = null) {
         if (!static::validateFilePath($filePath)) {
             throw new \Exception('Invalid file path: '.$filePath);
         }
@@ -73,10 +137,7 @@ class FusionImporter extends Importer {
             list($width, $height) = getimagesize($storage->path($savedFile));
         }
 
-        $directory = Directory::firstOrCreate([
-            'name' => $name,
-            'slug' => static::slug($name),
-        ]);
+        $directory = self::getDirectory($directory ?? $name);
 
         $model = FileModel::create([
             'directory_id' => $directory->id,
@@ -93,54 +154,13 @@ class FusionImporter extends Importer {
         return $model;
     }
 
-    public static function saveFilesForModel($files, $model, Field $field)
+    public static function assignFilesToModel($files, $model, Field $field)
     {
         if (isset($files)) {
-            //$files     = request()->file($field->handle);
-            $directory = Directory::firstOrCreate([
-                'name' => ($name = $field->settings['directory'] ?? 'uploads'),
-                'slug' => Str::slug($name),
-            ]);
-            
             $oldValues = $model->{$field->handle}->pluck('id');
             $newValues = collect($files)
-                ->mapWithKeys(function ($file, $key) use ($field, $directory) {
-                    if ($file instanceof FileModel) {
-                        $model = $file;
-                    } else {
-                        $width = $file['width'] ?? null;
-                        $height = $file['height'] ?? null;
-                        $filePath = $file['url'];
-
-                        $uuid = unique_id();
-                        $name = pathinfo($filePath, PATHINFO_FILENAME);
-                        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
-                        $mimetype = $file['mime'];
-                        $filetype = strtok($mimetype, '/');
-                        $location = "files/{$uuid}-{$name}.{$extension}";
-
-                        $this->line($location);
-                        $this->line($filePath);
-
-                        $savedFile = Storage::disk('public')->putFileAs('', $filePath, $location);
-                        $bytes = Storage::disk('public')->size($savedFile);
-
-                        if ($filetype == 'image') {
-                            list($width, $height) = getimagesize($filePath);
-                        }
-
-                        $model = FileModel::create([
-                            'directory_id' => $directory->id,
-                            'uuid'         => $uuid,
-                            'name'         => $name,
-                            'extension'    => $extension,
-                            'bytes'        => $bytes,
-                            'mimetype'     => $mimetype,
-                            'location'     => $location,
-                            'width'        => $width ?? null,
-                            'height'       => $height ?? null,
-                        ]);
-                    }
+                ->mapWithKeys(function ($file, $key) use ($field) {
+                    $model = $file;
 
                     return [$model['id'] => [
                         'field_id' => $field->id,
