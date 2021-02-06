@@ -43,7 +43,7 @@ class FusionImporter extends Importer {
     }
 
     public static function isFileSaved($filePath) {
-        return self::getSavedFileUid($filePath) === null;
+        return self::getSavedFileUid($filePath) != null;
     }
 
     public static function getFileUid($filePath) {
@@ -109,7 +109,7 @@ class FusionImporter extends Importer {
         $uuid = unique_id();
         $name = pathinfo($filePath, PATHINFO_FILENAME);
         $name = urldecode($name);
-        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+        $extension = pathinfo(parse_url($filePath, PHP_URL_PATH), PATHINFO_EXTENSION);
         $location = "files/{$uuid}-{$name}.{$extension}";
 
         $tried = 0;
