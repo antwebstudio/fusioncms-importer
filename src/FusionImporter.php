@@ -134,7 +134,7 @@ class FusionImporter extends Importer {
         $mimetype = $storage->mimetype($savedFile);
         $filetype = strtok($mimetype, '/');
         if ($filetype == 'image') {
-            list($width, $height) = getimagesize($storage->path($savedFile));
+            list($width, $height) = getimagesize($filePath);
         }
 
         $directory = self::getDirectory($directory ?? $name);
