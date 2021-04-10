@@ -101,7 +101,15 @@ class FusionImporter extends Importer {
         return $directory;
     }
 
+    public static function trimFilePath($filePath) {
+        if (strpos($filePath, '?') !== false) {
+            return substr($filePath, 0, strpos($filePath, '?'));
+        }
+        return $filePath;
+    }
+
     public static function saveFile($filePath, $directory = null) {
+        $filePath = self::trimFilePath($filePath);
         if (!static::validateFilePath($filePath)) {
             throw new \Exception('Invalid file path: '.$filePath);
         }
